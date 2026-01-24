@@ -46,27 +46,41 @@ export const PanelMovimientos = ({ historial }) => {
 
             {/* Lista de movimientos */}
             <div ref={referenciaScroll} className="flex-1 overflow-y-auto p-2 custom-scrollbar space-y-1 min-h-0 scroll-smooth">
-                {movimientosAgrupados.map((mov, idx) => (
-                    <div key={idx} className="grid grid-cols-[40px_1fr_1fr] items-center py-1 shrink-0 animate-in fade-in slide-in-from-bottom-1">
+                {movimientosAgrupados.map((mov, idx) => {
+                    // Detectamos si es el último movimiento para resaltarlo
+                    const indexBlancas = idx * 2;
+                    const indexNegras = idx * 2 + 1;
+                    const esUltimoBlancas = indexBlancas === historial.length - 1;
+                    const esUltimoNegras = indexNegras === historial.length - 1;
+
+                    return (
+                        <div key={idx} className="grid grid-cols-[40px_1fr_1fr] items-center py-1 shrink-0 animate-in fade-in slide-in-from-bottom-1">
                         
                         {/* Número de jugada */}
                         <span className="text-[10px] font-mono text-slate-600 text-center">{mov.numero}.</span>
                         
                         {/* Movimiento de blancas */}
-                        <div className="bg-white/5 mx-1 py-1.5 rounded-md text-xs font-bold text-white text-center border border-white/5">
+                        <div className={`mx-1 py-1.5 rounded-md text-xs font-bold text-center border transition-all duration-300 ${
+                            esUltimoBlancas 
+                                ? 'bg-amber-500 text-white border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-105 z-10' 
+                                : 'bg-white/5 text-slate-300 border-white/5 hover:bg-white/10'
+                        }`}>
                             {mov.blancas}
                         </div>
                         
                         {/* Movimiento de negras */}
-                        <div className={`mx-1 py-1.5 rounded-md text-xs font-bold text-center border ${
-                            mov.negras !== "---" 
-                                ? 'bg-blue-600/20 text-blue-400 border-blue-600/20' 
-                                : 'text-slate-600 border-transparent'
+                        <div className={`mx-1 py-1.5 rounded-md text-xs font-bold text-center border transition-all duration-300 ${
+                            mov.negras === "---" 
+                                ? 'text-slate-700 border-transparent'
+                                : esUltimoNegras
+                                    ? 'bg-amber-500 text-white border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-105 z-10'
+                                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
                         }`}>
                             {mov.negras}
                         </div>
                     </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );

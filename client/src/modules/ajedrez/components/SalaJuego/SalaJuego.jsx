@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { AlertTriangle } from "lucide-react";
 import { useMotorPartida } from "../../hooks/useMotorPartida";
 import { PanelMovimientos } from "./PanelMovimientos";
 import { CabeceraJuego } from "./CabeceraJuego";
@@ -7,8 +8,10 @@ import { SeccionChat } from "./SeccionChat";
 import { PopupAccion } from "./PopupAccion";
 import { PopupResultadoFinal } from "./PopupResultadoFinal";
 
+const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+
 // Vista principal de la partida
-export const SalaJuego = ({ idSala, usuario, abandonarPartida, config }) => {
+export const SalaJuego = ({ idSala, usuario, abandonarPartida, config, creando }) => {
     const {
         estadoDeLaPartida: datosPartida,
         colorAsignadoAlJugador: colorJugador,
@@ -16,6 +19,7 @@ export const SalaJuego = ({ idSala, usuario, abandonarPartida, config }) => {
         setCasillaSeleccionadaActual: setCasillaSeleccionada,
         movimientosPosiblesEnTablero: movimientosPosibles,
         setMovimientosPosiblesEnTablero: setMovimientosPosibles,
+        ultimoMovimiento,
         textoMensajeChat: mensajeChat,
         setTextoMensajeChat: setMensajeChat,
         listaDeMensajesRecibidos: listaMensajes,
@@ -32,13 +36,53 @@ export const SalaJuego = ({ idSala, usuario, abandonarPartida, config }) => {
 
     // Estado local para manejar el feedback visual al copiar el ID de la sala
     const [copiado, setCopiado] = useState(false);
+    const [salaNoEncontrada, setSalaNoEncontrada] = useState(false);
+
+    // Verificar si la sala existe al intentar entrar
+    useEffect(() => {
+        // Si estamos creando la sala, no verificamos existencia (evita 404 antes de que el socket conecte)
+        if (creando) return;
+
+        fetch(`${API_URL}/api/ajedrez/salas/${idSala}`)
+            .then(res => {
+                if (res.status === 404) setSalaNoEncontrada(true);
+            })
+            .catch(err => console.error("Error verificando sala:", err));
+    }, [idSala, creando]);
+
+    // Autocorrección: Si el socket conecta y recibe datos, la sala existe (corrige falsos 404)
+    useEffect(() => {
+        if (datosPartida) setSalaNoEncontrada(false);
+    }, [datosPartida]);
+
+    if (salaNoEncontrada) {
+        return (
+            <div className="w-full h-[80vh] flex flex-col items-center justify-center p-4 animate-in fade-in zoom-in duration-500">
+                <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md text-center border border-slate-100">
+                    <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <AlertTriangle className="text-red-500 w-10 h-10" />
+                    </div>
+                    <h2 className="text-3xl font-black text-slate-800 mb-3">¡Sala no encontrada!</h2>
+                    <p className="text-slate-500 mb-8 leading-relaxed">
+                        El código <span className="font-mono font-bold bg-slate-100 px-2 py-1 rounded text-slate-700">{idSala}</span> no existe o la partida ha finalizado.
+                    </p>
+                    <button 
+                        onClick={abandonarPartida}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all transform hover:scale-[1.02] shadow-lg shadow-blue-200"
+                    >
+                        Volver y Generar Uno Nuevo
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     if (!datosPartida || !datosPartida.matrizTablero || !config) {
         return (
             <div className="w-full h-[60vh] flex flex-col items-center justify-center gap-4">
                 <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                 <p className="font-black uppercase text-slate-400 tracking-widest text-[10px]">
-                    Sincronizando con plataforma.io...
+                    Cargando...
                 </p>
             </div>
         );
@@ -75,10 +119,13 @@ export const SalaJuego = ({ idSala, usuario, abandonarPartida, config }) => {
         abandonarPartida();
     };
 
+    const esMiTurno = datosPartida.turnoActual === colorJugador;
+    const puedePedirRetroceso = esMiTurno || popups.esperandoRetroceso;
+
     return (
         <div className="w-full flex flex-col items-center gap-8 animate-in fade-in duration-500">
             
-            <div className="w-full max-w-[1900px] px-6">
+            <div className="w-full max-w-[1900px] px-6 relative">
                 <CabeceraJuego
                     idSala={idSala}
                     partidaIniciada={datosPartida.partidaIniciada}
@@ -86,6 +133,17 @@ export const SalaJuego = ({ idSala, usuario, abandonarPartida, config }) => {
                     turnoActual={datosPartida.turnoActual}
                     colorJugador={colorJugador}
                     esperandoTablas={popups.esperandoTablas}
+                    esperandoRetroceso={popups.esperandoRetroceso}
+                    esperandoPausa={popups.esperandoPausa}
+                    pausada={datosPartida.pausada}
+                    alPausar={() => {
+                        if (popups.esperandoPausa) {
+                            setPopups(p => ({ ...p, esperandoPausa: false }));
+                        } else {
+                            setPopups(p => ({ ...p, esperandoPausa: true }));
+                            acciones.solicitarPausa();
+                        }
+                    }}
                     copiado={copiado}
                     alCopiar={manejarCopiar}
                     alAbandonar={() => setPopups(p => ({ ...p, abandonar: true }))}
@@ -94,6 +152,16 @@ export const SalaJuego = ({ idSala, usuario, abandonarPartida, config }) => {
                         setPopups(p => ({ ...p, esperandoTablas: true })); 
                         acciones.pedirTablas();
                     }}
+                    alPedirRetroceso={() => {
+                        if (!puedePedirRetroceso) return;
+                        if (popups.esperandoRetroceso) {
+                            setPopups(p => ({ ...p, esperandoRetroceso: false }));
+                        } else {
+                            setPopups(p => ({ ...p, esperandoRetroceso: true }));
+                            acciones.solicitarRetroceso();
+                        }
+                    }}
+                    retrocesoDeshabilitado={!puedePedirRetroceso}
                 />
             </div>
 
@@ -106,6 +174,7 @@ export const SalaJuego = ({ idSala, usuario, abandonarPartida, config }) => {
                             colorJugador={colorJugador}
                             casillaSeleccionada={casillaSeleccionada}
                             movimientosPosibles={movimientosPosibles}
+                            ultimoMovimiento={ultimoMovimiento}
                             alHacerClick={manejarClickCasilla}
                             config={config}
                         />
@@ -148,6 +217,18 @@ export const SalaJuego = ({ idSala, usuario, abandonarPartida, config }) => {
                 alRechazar={cancelarYSalirTotal}
             />
             
+            {/* --- POPUPS DE ESPERA (SOLICITANTE) --- */}
+            <PopupAccion
+                abierto={popups.esperandoTablas}
+                titulo="Solicitando Tablas"
+                mensaje="Esperando respuesta del oponente..."
+                colorBtn="bg-slate-500"
+                textoBtn="Cancelar Solicitud"
+                alConfirmar={() => setPopups(p => ({ ...p, esperandoTablas: false }))}
+                alCancelar={() => setPopups(p => ({ ...p, esperandoTablas: false }))}
+            />
+
+            {/* --- POPUPS DE ACCIÓN (RECEPTOR) --- */}
             <PopupAccion
                 abierto={popups.tablas}
                 titulo="¿Aceptar Tablas?"
@@ -158,6 +239,40 @@ export const SalaJuego = ({ idSala, usuario, abandonarPartida, config }) => {
                 alCancelar={() => { 
                     acciones.responderTablas(false);
                     setPopups(p => ({ ...p, tablas: false })); 
+                }}
+            />
+
+            <PopupAccion
+                abierto={popups.peticionRetroceso}
+                titulo="¿Retroceder?"
+                mensaje="Tu oponente quiere deshacer el último movimiento."
+                colorBtn="bg-orange-500"
+                textoBtn="Permitir Retroceso"
+                alConfirmar={() => {
+                    acciones.responderRetroceso(true);
+                    setPopups(p => ({ ...p, peticionRetroceso: false }));
+                }}
+                alCancelar={() => { 
+                    acciones.responderRetroceso(false);
+                    setPopups(p => ({ ...p, peticionRetroceso: false })); 
+                }}
+            />
+
+            <PopupAccion
+                abierto={popups.peticionPausa}
+                titulo={datosPartida.pausada ? "¿Reanudar Partida?" : "¿Pausar Partida?"}
+                mensaje={datosPartida.pausada 
+                    ? "Tu oponente quiere reanudar el juego." 
+                    : "Tu oponente quiere pausar el juego."}
+                colorBtn="bg-yellow-500"
+                textoBtn={datosPartida.pausada ? "Reanudar" : "Pausar"}
+                alConfirmar={() => {
+                    acciones.responderPausa(true);
+                    setPopups(p => ({ ...p, peticionPausa: false }));
+                }}
+                alCancelar={() => { 
+                    acciones.responderPausa(false);
+                    setPopups(p => ({ ...p, peticionPausa: false })); 
                 }}
             />
 

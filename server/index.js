@@ -23,6 +23,16 @@ app.use(express.json());
 // Endpoint de configuración
 app.get('/api/ajedrez/config', (req, res) => { res.json(constantes); });
 
+// Endpoint para verificar existencia de sala (para validación de códigos)
+app.get('/api/ajedrez/salas/:id', (req, res) => {
+    const sala = JuegoServicio.obtenerSala(req.params.id);
+    if (sala) {
+        res.json({ existe: true, pausada: sala.pausada });
+    } else {
+        res.status(404).json({ existe: false });
+    }
+});
+
 // Esquema GraphQL (Definición de tipos para Clientes y Alquileres)
 const typeDefs = gql`
     type Customer { 
@@ -95,8 +105,13 @@ async function iniciarServidor() {
             methods: ["GET", "POST"] 
         },
         transports: ['websocket', 'polling'], 
-        pingTimeout: 60000, 
-        pingInterval: 25000 
+        pingTimeout: 300000, 
+        pingInterval: 25000,
+        connectionStateRecovery: {
+            // Mantiene la sesión viva 2 minutos si se pierde la conexión (ej. móvil en segundo plano)
+            maxDisconnectionDuration: 120000,
+            skipMiddlewares: true
+        }
     });
 
     // Manejo de conexiones de sockets en plataforma.io
@@ -106,6 +121,80 @@ async function iniciarServidor() {
         
         // Registramos todos los eventos de ajedrez (movimientos, chats, etc.)
         registrarHandlersAjedrez(io, socket); 
+
+        socket.on('solicitarPausa', (idSala) => {
+            try {
+                socket.to(idSala).emit('pausaSolicitada');
+            } catch (e) { console.error("Error solicitando pausa:", e); }
+        });
+
+        socket.on('responderPausa', ({ idSala, aceptado }) => {
+            try {
+                if (aceptado) {
+                    const sala = JuegoServicio.obtenerSala(idSala);
+
+                    if (sala) {
+                        sala.pausada = !sala.pausada;
+                        const estado = {
+                            matrizTablero: sala.motorAjedrez.board(),
+                            turnoActual: sala.motorAjedrez.turn(),
+                            estaEnJaque: sala.motorAjedrez.inCheck(),
+                            estaEnJaqueMate: sala.motorAjedrez.isCheckmate(),
+                            estaEnTablas: sala.motorAjedrez.isDraw(),
+                            tiempoRestante: sala.tiempoRestante,
+                            pausada: sala.pausada
+                        };
+                        io.to(idSala).emit('estadoJuego', estado);
+                        io.to(idSala).emit('pausaAccionada');
+                    } else {
+                        // Si falla (ej: sala no existe), rechazamos para desbloquear al cliente
+                        io.to(idSala).emit('pausaRechazada');
+                    }
+                } else {
+                    socket.to(idSala).emit('pausaRechazada');
+                }
+            } catch (error) {
+                console.error("Error en responderPausa:", error);
+                io.to(idSala).emit('pausaRechazada');
+            }
+        });
+
+        socket.on('solicitarRetroceso', (idSala) => {
+            try {
+                socket.to(idSala).emit('retrocesoSolicitado');
+            } catch (e) { console.error("Error solicitando retroceso:", e); }
+        });
+
+        socket.on('responderRetroceso', ({ idSala, aceptado }) => {
+            try {
+                if (aceptado) {
+                    const sala = JuegoServicio.obtenerSala(idSala);
+                    const exito = sala && sala.motorAjedrez && sala.motorAjedrez.undo();
+
+                    if (exito && sala) {
+                        const estado = {
+                            matrizTablero: sala.motorAjedrez.board(),
+                            turnoActual: sala.motorAjedrez.turn(),
+                            estaEnJaque: sala.motorAjedrez.inCheck(),
+                            estaEnJaqueMate: sala.motorAjedrez.isCheckmate(),
+                            estaEnTablas: sala.motorAjedrez.isDraw(),
+                            tiempoRestante: sala.tiempoRestante,
+                            pausada: sala.pausada
+                        };
+                        io.to(idSala).emit('estadoJuego', estado);
+                        io.to(idSala).emit('retrocesoRealizado');
+                    } else {
+                        // Si no se puede retroceder (ej: inicio partida), avisamos
+                        io.to(idSala).emit('retrocesoRechazado');
+                    }
+                } else {
+                    socket.to(idSala).emit('retrocesoRechazado');
+                }
+            } catch (error) {
+                console.error("Error en responderRetroceso:", error);
+                io.to(idSala).emit('retrocesoRechazado');
+            }
+        });
     });
 
     /**
@@ -117,7 +206,11 @@ async function iniciarServidor() {
         JuegoServicio.actualizarSalasPorTick(
             (idSala, tiempoActual) => { 
                 // Actualiza el reloj en los clientes de la sala
-                io.to(idSala).emit('updateTimer', tiempoActual); 
+                // Verificamos si la sala está pausada antes de enviar actualización
+                const sala = JuegoServicio.obtenerSala(idSala);
+                if (sala && !sala.pausada) {
+                    io.to(idSala).emit('updateTimer', tiempoActual); 
+                }
             },
             (idSala, resultado) => { 
                 // Notifica el fin de la partida y actualiza el lobby

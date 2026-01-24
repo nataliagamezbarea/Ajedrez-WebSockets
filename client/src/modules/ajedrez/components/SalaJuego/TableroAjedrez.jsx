@@ -24,6 +24,7 @@ const Casilla = ({
   colorJugador, 
   casillaSeleccionada, 
   movimientosPosibles, 
+  ultimoMovimiento,
   alHacerClick, 
   config 
 }) => {
@@ -35,6 +36,25 @@ const Casilla = ({
   const esMiPieza = pieza && colorPiezaTraducido === colorJugador;
   const sel = casillaSeleccionada?.columna === columna && casillaSeleccionada?.fila === fila;
   const esMovimientoLegal = movimientosPosibles.some(m => m.fila === fila && m.columna === columna);
+  
+  const letras = ['a','b','c','d','e','f','g','h'];
+  const numeros = ['8','7','6','5','4','3','2','1'];
+  const esUltimoMovimiento = ultimoMovimiento && ultimoMovimiento.to === `${letras[columna]}${numeros[fila]}`;
+  const esCaptura = esUltimoMovimiento && ultimoMovimiento?.captura;
+  const esReyEnJaque = piezaId?.startsWith('k') && colorPiezaTraducido === datosPartida.turnoActual && datosPartida.estaEnJaque;
+
+  // Usamos style inline para garantizar que el color se aplique sobre cualquier clase de Tailwind
+  const obtenerEstiloFondo = () => {
+    const colorBase = (fila+columna)%2===0 ? '#eeeed2' : '#769656';
+    if (sel) return { backgroundColor: '#facc15' }; 
+    
+    if (esUltimoMovimiento) {
+      return { 
+        background: 'radial-gradient(circle, rgba(220, 38, 38, 0.8) 25%, ' + colorBase + ' 100%)'
+      };
+    }
+    return { backgroundColor: colorBase };
+  };
 
   const obtenerCursor = () => {
     if (!datosPartida.partidaIniciada) return 'cursor-wait';
@@ -46,9 +66,8 @@ const Casilla = ({
   return (
     <div 
       onClick={() => esMiTurno && alHacerClick(columna, fila)}
+      style={obtenerEstiloFondo()}
       className={`w-full h-full flex items-center justify-center relative transition-colors duration-200
-        ${(fila+columna)%2===0 ? 'bg-[#eeeed2]' : 'bg-[#769656]'}
-        ${sel ? 'bg-yellow-300/80' : ''}
         ${esMovimientoLegal && !pieza ? 'hover:bg-black/10' : ''}
         ${obtenerCursor()}
       `}
@@ -58,10 +77,19 @@ const Casilla = ({
           ${pieza ? 'w-[85%] h-[85%] border-[4px] border-black/10' : 'w-3 h-3 md:w-5 md:h-5'}`} />
       )}
       {piezaId && GALERIA[piezaId] && (
-        <img src={GALERIA[piezaId]} className={`w-[95%] h-[95%] z-10 select-none object-contain transition-transform ${esMiTurno && esMiPieza ? 'hover:scale-110 active:scale-95' : 'opacity-90'}`} alt="" />
+        <img 
+          src={GALERIA[piezaId]} 
+          className={`w-[95%] h-[95%] z-10 select-none object-contain transition-transform 
+            ${esMiTurno && esMiPieza ? 'hover:scale-110 active:scale-95 cursor-pointer' : ''}
+            ${esReyEnJaque ? 'bg-red-500/50 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.8)] animate-pulse' : ''}
+          `} alt="" />
       )}
-      {piezaId?.startsWith('k') && colorPiezaTraducido === datosPartida.turnoActual && datosPartida.estaEnJaque && (
-        <div className="absolute inset-0 bg-red-500/40 animate-pulse z-0" />
+      {/* Animación de Captura (Explosión) */}
+      {esCaptura && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none animate-in zoom-in duration-300">
+            <div className="absolute inset-0 bg-red-500/20 rounded-full animate-pulse" />
+            <span className="text-2xl drop-shadow-md">💥</span>
+        </div>
       )}
     </div>
   );
@@ -73,6 +101,7 @@ export const TableroAjedrez = ({
   colorJugador,
   casillaSeleccionada,
   alHacerClick,
+  ultimoMovimiento,
   movimientosPosibles = [],
   config
 }) => {
@@ -122,6 +151,7 @@ export const TableroAjedrez = ({
                 colorJugador={colorJugador}
                 casillaSeleccionada={casillaSeleccionada}
                 movimientosPosibles={movimientosPosibles}
+                ultimoMovimiento={ultimoMovimiento}
                 alHacerClick={alHacerClick}
                 config={config}
               />

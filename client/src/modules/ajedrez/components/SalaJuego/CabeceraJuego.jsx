@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { RotateCcw } from 'lucide-react';
 
 // Barra superior con información de la partida y controles
 export const CabeceraJuego = ({ 
@@ -9,10 +10,15 @@ export const CabeceraJuego = ({
   alAbandonar, 
   alRendirse, 
   alPedirTablas, 
+  alPedirRetroceso,
   tiempo, 
   turnoActual, 
   colorJugador, 
-  esperandoTablas 
+  esperandoTablas,
+  esperandoRetroceso,
+  esperandoPausa,
+  pausada,
+  alPausar
 }) => {
 
   const esMiTurno = useMemo(
@@ -120,13 +126,40 @@ export const CabeceraJuego = ({
             Propuesta enviada
           </div>
 
+        ) : esperandoRetroceso ? (
+          <div className="px-4 py-2 bg-orange-50 border border-orange-100 rounded-2xl text-[8px] sm:text-[9px] font-black text-orange-600 uppercase animate-in fade-in zoom-in whitespace-nowrap text-center w-full sm:w-auto">
+            Solicitando retroceso...
+          </div>
+
+        ) : esperandoPausa ? (
+          <div className="px-4 py-2 bg-yellow-50 border border-yellow-100 rounded-2xl text-[8px] sm:text-[9px] font-black text-yellow-600 uppercase animate-in fade-in zoom-in whitespace-nowrap text-center w-full sm:w-auto">
+            Solicitando...
+          </div>
+
         ) : (
           <div className="flex gap-2 animate-in slide-in-from-right-4 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
+            <button 
+              onClick={alPedirRetroceso} 
+              className="px-3 py-2.5 bg-white text-slate-500 border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all active:scale-95 shadow-sm"
+              title="Solicitar retroceso"
+            >
+              <RotateCcw size={14} />
+            </button>
             <button 
               onClick={alPedirTablas} 
               className="px-4 sm:px-5 py-2.5 bg-white text-slate-600 border border-slate-200 rounded-2xl text-[9px] sm:text-[10px] font-black uppercase hover:bg-slate-50 transition-all active:scale-95 shadow-sm whitespace-nowrap"
             >
               Tablas
+            </button>
+            <button 
+              onClick={alPausar}
+              className={`px-4 sm:px-5 py-2.5 rounded-2xl text-[9px] sm:text-[10px] font-black uppercase transition-all active:scale-95 shadow-sm whitespace-nowrap border ${
+                pausada 
+                  ? 'bg-yellow-500 text-white border-yellow-600 hover:bg-yellow-600 animate-pulse' 
+                  : 'bg-slate-700 text-white border-slate-800 hover:bg-slate-800'
+              }`}
+            >
+              {pausada ? "Reanudar" : "Pausar"}
             </button>
             <button 
               onClick={alRendirse} 

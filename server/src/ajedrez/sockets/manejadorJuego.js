@@ -1,4 +1,4 @@
-﻿const JuegoServicio = require('../servicios/juegoServicio');
+﻿﻿const JuegoServicio = require('../servicios/juegoServicio');
 
 module.exports = (io, socket, sincronizar) => {
     socket.on('obtenerMovimientos', ({ idSala, casilla }) => {
@@ -20,7 +20,13 @@ module.exports = (io, socket, sincronizar) => {
         try {
             const mov = sala.motorAjedrez.move({ from: desde, to: hasta, promotion: 'q' });
             if (mov) {
-                io.to(idSala).emit('movimientoRealizado', { san: mov.san });
+                io.to(idSala).emit('movimientoRealizado', {
+                    san: mov.san,
+                    from: mov.from,
+                    to: mov.to,
+                    color: mov.color,
+                    captura: mov.captured
+                });
                 sala.tiempoRestante = 120;
                 sincronizar(idSala);
                 const fin = JuegoServicio.verificarFinDeJuego(sala.motorAjedrez);

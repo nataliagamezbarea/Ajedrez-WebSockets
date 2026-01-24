@@ -1,4 +1,4 @@
-﻿﻿const { TIEMPO_POR_TURNO, MOTIVOS_FIN } = require('../utilidades/constantes');
+﻿﻿﻿﻿const { TIEMPO_POR_TURNO, MOTIVOS_FIN } = require('../utilidades/constantes');
 const store = require('./salaStore');
 const ayudanteMotor = require('./ayudanteMotor');
 const { Chess } = require('chess.js');
@@ -15,7 +15,7 @@ const JuegoServicio = {
             }));
     },
 
-    crearSala: (idSala, esPrivada) => {
+    crearSala: (idSala, esPrivada = false) => {
         let sala = store.getSala(idSala);
         if (!sala) {
             sala = {
@@ -23,11 +23,30 @@ const JuegoServicio = {
                 jugadores: [],
                 motorAjedrez: new Chess(),
                 tiempoRestante: TIEMPO_POR_TURNO,
-                votosRevancha: new Set() 
+                votosRevancha: new Set(),
+                pausada: false
             };
             store.setSala(idSala, sala);
         }
         return sala;
+    },
+
+    alternarPausa: (idSala) => {
+        const sala = store.getSala(idSala);
+        if (sala) {
+            sala.pausada = !sala.pausada;
+            return sala.pausada;
+        }
+        return null;
+    },
+
+    retrocederMovimiento: (idSala) => {
+        const sala = store.getSala(idSala);
+        if (sala && sala.motorAjedrez) {
+            sala.motorAjedrez.undo();
+            return sala;
+        }
+        return null;
     },
 
     obtenerSala: (idSala) => store.getSala(idSala),
@@ -40,6 +59,7 @@ const JuegoServicio = {
             sala.motorAjedrez = new Chess();
             sala.tiempoRestante = TIEMPO_POR_TURNO;
             sala.votosRevancha.clear();
+            sala.pausada = false;
             return sala;
         }
         return null;
@@ -58,9 +78,9 @@ const JuegoServicio = {
                 const haHabidoMovimientos = sala.motorAjedrez.history().length > 0;
 
                 if (haHabidoMovimientos) {
-                    // Partida en curso: eliminar sala
-                    store.deleteSala(idSala);
-                    return { idSala, borrar: true, motivo: "Partida abandonada en curso" };
+                    // Partida en curso: NO eliminamos la sala inmediatamente.
+                    // Permitimos reconexión (background). El reloj del juego cerrará la sala si se agota el tiempo.
+                    return null;
                 } else {
                     // Partida no iniciada: eliminar jugador
                     sala.jugadores.splice(index, 1);
@@ -87,7 +107,7 @@ const JuegoServicio = {
         const salas = store.getSalas();
         for (const idSala in salas) {
             const sala = salas[idSala];
-            if (sala.jugadores.length === 2 && !sala.motorAjedrez.isGameOver()) {
+            if (sala.jugadores.length === 2 && !sala.motorAjedrez.isGameOver() && !sala.pausada) {
                 sala.tiempoRestante--;
                 if (sala.tiempoRestante <= 0) {
                     const ganador = sala.motorAjedrez.turn() === 'w' ? 'Negras' : 'Blancas';

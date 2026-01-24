@@ -9,12 +9,14 @@ export const useMotorPartida = (idSalaActiva, ejecutarAbandono) => {
         turnoActual: 'blancas',
         tiempoRestante: 120,
         partidaIniciada: false,
-        estaEnJaque: false
+        estaEnJaque: false,
+        pausada: false
     });
 
     const [colorAsignadoAlJugador, setColorAsignadoAlJugador] = useState('blancas');
     const [casillaSeleccionadaActual, setCasillaSeleccionadaActual] = useState(null);
     const [movimientosPosiblesEnTablero, setMovimientosPosiblesEnTablero] = useState([]);
+    const [ultimoMovimiento, setUltimoMovimiento] = useState(null);
     
     const [textoMensajeChat, setTextoMensajeChat] = useState("");
     const [listaDeMensajesRecibidos, setListaDeMensajesRecibidos] = useState([]);
@@ -28,7 +30,11 @@ export const useMotorPartida = (idSalaActiva, ejecutarAbandono) => {
         tablas: false,
         rendirse: false,
         abandonar: false,
-        esperandoTablas: false
+        esperandoTablas: false,
+        peticionRetroceso: false,
+        esperandoRetroceso: false,
+        peticionPausa: false,
+        esperandoPausa: false
     });
 
     const referenciaIntervaloRevancha = useRef(null);
@@ -70,14 +76,25 @@ export const useMotorPartida = (idSalaActiva, ejecutarAbandono) => {
         );
 
         socket.on("nuevoMensaje", (mensajeEntrante) => {
-            setListaDeMensajesRecibidos(prev => [...prev, mensajeEntrante]);
+            const hora = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            setListaDeMensajesRecibidos(prev => [...prev, { ...mensajeEntrante, hora }]);
         });
 
         socket.on("movimientosPermitidos", setMovimientosPosiblesEnTablero);
 
-        socket.on("movimientoRealizado", (datosMovimiento) =>
-            setHistorialDeMovimientosSAN(prev => [...prev, datosMovimiento.san])
-        );
+        socket.on("movimientoRealizado", (datosMovimiento) => {
+            setHistorialDeMovimientosSAN(prev => [...prev, datosMovimiento.san]);
+            // Corrección: Verificamos que existan los datos para evitar errores si el servidor envía solo SAN
+            if (datosMovimiento.from && datosMovimiento.to) {
+                setUltimoMovimiento({ 
+                    from: datosMovimiento.from, 
+                    to: datosMovimiento.to,
+                    captura: datosMovimiento.san.includes('x') // Detectamos captura por la notación
+                });
+            } else {
+                console.warn("Faltan datos 'from'/'to' en movimientoRealizado. Revisa el servidor.");
+            }
+        });
 
         socket.on("propuestaTablasRecibida", () =>
             setVentanasEmergentes(prev => ({ ...prev, tablas: true }))
@@ -85,6 +102,30 @@ export const useMotorPartida = (idSalaActiva, ejecutarAbandono) => {
         socket.on("propuestaTablasRechazada", () =>
             setVentanasEmergentes(prev => ({ ...prev, esperandoTablas: false }))
         );
+
+        socket.on("retrocesoSolicitado", () => 
+            setVentanasEmergentes(prev => ({ ...prev, peticionRetroceso: true }))
+        );
+        socket.on("retrocesoRechazado", () => 
+            setVentanasEmergentes(prev => ({ ...prev, esperandoRetroceso: false }))
+        );
+        socket.on("retrocesoRealizado", () => {
+            setHistorialDeMovimientosSAN(prev => prev.slice(0, -1));
+            setUltimoMovimiento(null);
+            setVentanasEmergentes(prev => ({ 
+                ...prev, peticionRetroceso: false, esperandoRetroceso: false 
+            }));
+        });
+
+        socket.on("pausaSolicitada", () => 
+            setVentanasEmergentes(prev => ({ ...prev, peticionPausa: true }))
+        );
+        socket.on("pausaRechazada", () => 
+            setVentanasEmergentes(prev => ({ ...prev, esperandoPausa: false }))
+        );
+        socket.on("pausaAccionada", () => {
+            setVentanasEmergentes(prev => ({ ...prev, peticionPausa: false, esperandoPausa: false }));
+        });
 
         socket.on("revanchaSolicitada", () => setFaseDeRevanchaActual("recibido"));
         socket.on("revanchaCancelada", () => {
@@ -94,7 +135,8 @@ export const useMotorPartida = (idSalaActiva, ejecutarAbandono) => {
         socket.on("revanchaAceptada", () => {
             setFaseDeRevanchaActual(null);
             setHistorialDeMovimientosSAN([]);
-            setVentanasEmergentes({ final: null, tablas: false, rendirse: false, abandonar: false, esperandoTablas: false });
+            setUltimoMovimiento(null);
+            setVentanasEmergentes({ final: null, tablas: false, rendirse: false, abandonar: false, esperandoTablas: false, peticionRetroceso: false, esperandoRetroceso: false, peticionPausa: false, esperandoPausa: false });
         });
 
         socket.on("partidaFinalizada", (resultado) => {
@@ -124,6 +166,12 @@ export const useMotorPartida = (idSalaActiva, ejecutarAbandono) => {
             socket.off("movimientoRealizado");
             socket.off("propuestaTablasRecibida");
             socket.off("propuestaTablasRechazada");
+            socket.off("retrocesoSolicitado");
+            socket.off("retrocesoRechazado");
+            socket.off("retrocesoRealizado");
+            socket.off("pausaSolicitada");
+            socket.off("pausaRechazada");
+            socket.off("pausaAccionada");
             socket.off("revanchaSolicitada");
             socket.off("revanchaCancelada");
             socket.off("revanchaAceptada");
@@ -147,6 +195,10 @@ export const useMotorPartida = (idSalaActiva, ejecutarAbandono) => {
         solicitarRevancha: () => socket.emit("solicitarRevancha", idSalaActiva),
         aceptarRevancha: () => socket.emit("aceptarRevancha", idSalaActiva),
         cancelarRevancha: () => socket.emit("cancelarRevancha", idSalaActiva),
+        solicitarPausa: () => socket.emit("solicitarPausa", idSalaActiva),
+        responderPausa: (aceptado) => socket.emit("responderPausa", { idSala: idSalaActiva, aceptado }),
+        solicitarRetroceso: () => socket.emit("solicitarRetroceso", idSalaActiva),
+        responderRetroceso: (aceptado) => socket.emit("responderRetroceso", { idSala: idSalaActiva, aceptado }),
     };
 
     return {
@@ -156,6 +208,7 @@ export const useMotorPartida = (idSalaActiva, ejecutarAbandono) => {
         setCasillaSeleccionadaActual,
         movimientosPosiblesEnTablero,
         setMovimientosPosiblesEnTablero,
+        ultimoMovimiento,
         textoMensajeChat,
         setTextoMensajeChat,
         listaDeMensajesRecibidos,

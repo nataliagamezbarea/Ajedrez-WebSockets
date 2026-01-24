@@ -1,4 +1,5 @@
-import { Hash, Key, ChevronRight, Zap, Users, Lock } from "lucide-react";
+import { useState } from "react";
+import { Hash, Key, ChevronRight, Zap, Users, Lock, AlertCircle, Loader2 } from "lucide-react";
 import { SelectorModo } from "./SelectorModo";
 import { ListaSalasPublicas } from "./ListaSalasPublicas";
 
@@ -7,6 +8,8 @@ import { ListaSalasPublicas } from "./ListaSalasPublicas";
  * Permite alternar entre el modo público (partidas rápidas o personalizadas) 
  * y el modo privado (generación y unión mediante códigos) en plataforma.io.
  */
+const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+
 export const SeleccionSala = ({
   idSala,
   setIdSala,
@@ -14,7 +17,36 @@ export const SeleccionSala = ({
   salasPublicas,
   esPrivada,
   setEsPrivada,
-}) => (
+}) => {
+  const [validando, setValidando] = useState(false);
+  const [error, setError] = useState(null);
+
+  const validarYUnirse = async () => {
+    if (!idSala.trim()) return;
+    
+    setValidando(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`${API_URL}/api/ajedrez/salas/${idSala}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.existe) {
+          entrarASala();
+        } else {
+          setError("La sala no existe o ha finalizado.");
+        }
+      } else {
+        setError("No se pudo verificar la sala.");
+      }
+    } catch (e) {
+      setError("Error de conexión con el servidor.");
+    } finally {
+      setValidando(false);
+    }
+  };
+
+  return (
   <div className="w-full flex flex-col gap-6 animate-in fade-in duration-500">
 
     {/* SECCIÓN 1: Selector de Categoría (Público / Privado)
@@ -58,7 +90,11 @@ export const SeleccionSala = ({
         
         {/* Generación de ID: Llama a entrarASala sin ID previo para que el backend genere uno privado */}
         <button
-          onClick={() => entrarASala()}
+          onClick={() => {
+            const codigoRandom = Math.random().toString(36).substring(2, 8).toUpperCase();
+            setIdSala(codigoRandom);
+            entrarASala(codigoRandom);
+          }}
           className="w-full bg-blue-600 text-white font-black py-5 rounded-[1.5rem] hover:bg-blue-700 transition-all uppercase shadow-lg shadow-blue-100 text-[10px] tracking-[0.2em] flex items-center justify-center gap-2 active:scale-95"
         >
           <Lock size={14} /> Generar Código Privado
@@ -83,13 +119,21 @@ export const SeleccionSala = ({
           />
         </div>
 
+        {/* Mensaje de Error de Validación */}
+        {error && (
+          <div className="flex items-center gap-2 text-red-500 text-[10px] font-black uppercase tracking-wider bg-red-50 p-3 rounded-xl border border-red-100 animate-in fade-in slide-in-from-top-1">
+            <AlertCircle size={14} />
+            {error}
+          </div>
+        )}
+
         {/* Botón de validación: Deshabilitado hasta que se detecte contenido en el input */}
         <button
-          onClick={() => entrarASala()}
-          disabled={!idSala.trim()}
+          onClick={validarYUnirse}
+          disabled={!idSala.trim() || validando}
           className="w-full bg-slate-900 text-white font-black py-5 rounded-[1.5rem] hover:bg-black transition-all disabled:opacity-20 disabled:grayscale uppercase shadow-xl text-[10px] tracking-[0.2em] active:scale-95"
         >
-          Unirse por Código
+          {validando ? <Loader2 size={14} className="animate-spin mx-auto" /> : "Unirse por Código"}
         </button>
       </div>
     )}
@@ -98,4 +142,5 @@ export const SeleccionSala = ({
         Muestra la actividad actual del servidor en plataforma.io */}
     {!esPrivada && <ListaSalasPublicas salas={salasPublicas} alUnirse={entrarASala} />}
   </div>
-);
+  );
+};

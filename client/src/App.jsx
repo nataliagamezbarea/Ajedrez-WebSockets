@@ -14,6 +14,15 @@ const VISTAS = {
   SAKILA: "sakila",
 };
 
+// Configuración por defecto para carga instantánea (evita esperar al servidor)
+const DEFAULT_CONFIG = {
+  COLORES: {
+    BLANCO: 'w',
+    NEGRO: 'b',
+    NOMBRES: { w: 'blancas', b: 'negras' }
+  }
+};
+
 function App() {
   const { loginWithRedirect, isAuthenticated: estaAutenticadoConGoogle } = useAuth0();
   
@@ -30,7 +39,7 @@ function App() {
   } = useSesionUsuario();
   
   const [modulo, setModulo] = useState(VISTAS.MENU);
-  const [configAjedrez, setConfigAjedrez] = useState(null);
+  const [configAjedrez, setConfigAjedrez] = useState(DEFAULT_CONFIG);
 
   // Carga de configuración inicial y sistema Keep-Alive para Render
   useEffect(() => {
@@ -70,7 +79,7 @@ function App() {
       {/* Aviso visual si el servidor se está despertando */}
       {!configAjedrez && (
         <div className="bg-blue-600 text-white text-[10px] font-bold text-center py-1 uppercase tracking-widest animate-pulse">
-          Conectando con el servidor... (Puede tardar unos segundos)
+          Cargando...
         </div>
       )}
 
@@ -109,7 +118,7 @@ function App() {
             ) : (
               <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400 gap-4">
                 <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-xs font-bold uppercase tracking-widest">Estableciendo conexión...</p>
+                <p className="text-xs font-bold uppercase tracking-widest">Cargando...</p>
               </div>
             )
           )}

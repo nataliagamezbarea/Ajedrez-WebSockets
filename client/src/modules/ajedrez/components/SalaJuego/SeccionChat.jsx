@@ -40,8 +40,9 @@ export const SeccionChat = ({
                 key={i} 
                 className={`flex flex-col ${esMio ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-2 duration-300`}
               >
-                <span className="text-[9px] font-bold text-slate-500 uppercase mb-1 px-1">
+                <span className="text-[9px] font-bold text-slate-500 uppercase mb-1 px-1 flex gap-2 items-center">
                   {esMio ? 'Tú' : (m.nombre || 'Rival')}
+                  <span className="text-[8px] text-slate-400 font-normal opacity-70">{m.hora}</span>
                 </span>
                 
                 <div className={`max-w-[85%] px-4 py-2 rounded-2xl text-sm leading-relaxed 
