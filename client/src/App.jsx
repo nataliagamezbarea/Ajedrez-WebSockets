@@ -41,23 +41,40 @@ function App() {
   const [modulo, setModulo] = useState(VISTAS.MENU);
   const [configAjedrez, setConfigAjedrez] = useState(DEFAULT_CONFIG);
 
-  // Carga de configuración inicial y sistema Keep-Alive para Render
+  // Carga de configuración inicial
   useEffect(() => {
-    const conectarConServidor = () => {
-      fetch(`${API_URL}/api/ajedrez/config`)
-        .then((res) => res.json())
-        .then((datos) => setConfigAjedrez(datos))
-        .catch((err) => console.error("Esperando al servidor...", err));
+    fetch(`${API_URL}/api/ajedrez/config`)
+      .then((res) => res.json())
+      .then((datos) => setConfigAjedrez(datos))
+      .catch((err) => console.error("Esperando al servidor...", err));
+  }, []);
+
+  // Sistema Keep-Alive SOLO en producción (Vercel):
+  // despierta el backend de Render al visitar la web y lo mantiene activo mientras se usa.
+  useEffect(() => {
+    // En desarrollo (vite dev) no es necesario mantener despierto el servidor local
+    if (!import.meta.env.PROD) return;
+
+    const despertarServidor = () => {
+      fetch(`${API_URL}/api/ajedrez/config`).catch(() => {});
     };
 
-    conectarConServidor(); // Conexión inmediata al abrir
+    // 1) Al abrir la web: despertamos el backend (Render Free se duerme a los 15 min)
+    despertarServidor();
 
-    // Ping cada 10 min para evitar que Render se duerma (Free Tier timeout: 15 min)
-    const intervalo = setInterval(() => {
-      fetch(`${API_URL}/api/ajedrez/config`).catch(() => {}); 
-    }, 10 * 60 * 1000);
+    // 2) Ping periódico cada 9 min (por debajo del timeout de 15 min de Render Free)
+    const intervalo = setInterval(despertarServidor, 9 * 60 * 1000);
 
-    return () => clearInterval(intervalo);
+    // 3) Si el usuario vuelve a la pestaña tras un rato, lo despertamos al momento
+    const alVolverALaPestanya = () => {
+      if (document.visibilityState === "visible") despertarServidor();
+    };
+    document.addEventListener("visibilitychange", alVolverALaPestanya);
+
+    return () => {
+      clearInterval(intervalo);
+      document.removeEventListener("visibilitychange", alVolverALaPestanya);
+    };
   }, []);
 
   const manejarAccesoSakila = () => {
